@@ -1,7 +1,9 @@
+from django.contrib import messages
+from django.contrib.auth.mixins import PermissionRequiredMixin
 from django.shortcuts import redirect
 from django.urls import reverse_lazy, reverse
 from django.views import View
-from django.views.generic import ListView, DetailView, CreateView, TemplateView
+from django.views.generic import ListView, DetailView, CreateView
 from webapp.models import Product, Order, OrderProduct
 
 
@@ -15,11 +17,13 @@ class ProductView(DetailView):
     template_name = 'product/detail.html'
 
 
-class ProductCreateView(CreateView):
+class ProductCreateView(PermissionRequiredMixin, CreateView):
     model = Product
     template_name = 'product/create.html'
     fields = ('name', 'category', 'price', 'photo')
     success_url = reverse_lazy('webapp:index')
+    permission_required = 'webapp.add_product'
+    permission_denied_message = "Доступ запрещён"
 
 
 class BasketChangeView(View):
@@ -61,6 +65,7 @@ class BasketView(CreateView):
         response = super().form_valid(form)
         self._save_order_products()
         self._clean_basket()
+        messages.success(self.request, 'Заказ сохранён!')
         return response
 
     def _prepare_basket(self):
