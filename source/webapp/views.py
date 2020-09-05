@@ -4,20 +4,22 @@ from django.shortcuts import redirect
 from django.urls import reverse_lazy, reverse
 from django.views import View
 from django.views.generic import ListView, DetailView, CreateView
+
+from webapp.mixins import StatsMixin
 from webapp.models import Product, Order, OrderProduct
 
 
-class IndexView(ListView):
+class IndexView(StatsMixin, ListView):
     model = Product
     template_name = 'index.html'
 
 
-class ProductView(DetailView):
+class ProductView(StatsMixin, DetailView):
     model = Product
     template_name = 'product/detail.html'
 
 
-class ProductCreateView(PermissionRequiredMixin, CreateView):
+class ProductCreateView(PermissionRequiredMixin, StatsMixin, CreateView):
     model = Product
     template_name = 'product/create.html'
     fields = ('name', 'category', 'price', 'photo')
@@ -46,7 +48,7 @@ class BasketChangeView(View):
         return redirect(next_url)
 
 
-class BasketView(CreateView):
+class BasketView(StatsMixin, CreateView):
     model = Order
     fields = ('first_name', 'last_name', 'phone', 'email')
     template_name = 'product/basket.html'
