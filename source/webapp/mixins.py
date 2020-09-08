@@ -2,7 +2,7 @@ from datetime import datetime
 from django.views.generic import View
 
 
-class StatsMixin(View):
+class StatsMixin():
     def get(self, request, *args, **kwargs):
         self.update_page_visits()
         self.update_visits_total()

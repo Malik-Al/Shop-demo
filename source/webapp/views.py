@@ -4,9 +4,10 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, DetailView, CreateView,  UpdateView, DeleteView
 from webapp.mixins import StatsMixin
-from webapp.models import Product, Order, OrderProduct
+from webapp.models import Product, Order, OrderProduct, ORDER_STATUS_DELIVERED, ORDER_STATUS_CANCELED
 from django.http import HttpResponseRedirect
 from django.shortcuts import reverse, redirect, get_object_or_404
+from webapp.forms import BasketOrderCreateForm, ManualOrderForm, OrderProductForm
 
 
 class IndexView(StatsMixin, ListView):
@@ -33,7 +34,6 @@ class ProductCreateView(PermissionRequiredMixin, StatsMixin, CreateView):
         return reverse('webapp:product_detail', kwargs={'pk': self.object.pk})
 
 
-
 class ProductUpdateView(LoginRequiredMixin, StatsMixin, UpdateView):
     model = Product
     template_name = 'product/update.html'
@@ -55,8 +55,6 @@ class ProductDeleteView(LoginRequiredMixin, StatsMixin, DeleteView):
         product.in_order = False
         product.save()
         return HttpResponseRedirect(self.get_success_url())
-
-
 
 
 class BasketChangeView(View):
@@ -83,7 +81,7 @@ class BasketChangeView(View):
 
 class BasketView(StatsMixin, CreateView):
     model = Order
-    fields = ('first_name', 'last_name', 'phone', 'email')
+    form_class = BasketOrderCreateForm
     template_name = 'product/basket.html'
     success_url = reverse_lazy('webapp:index')
 
@@ -92,6 +90,11 @@ class BasketView(StatsMixin, CreateView):
         kwargs['basket'] = basket
         kwargs['basket_total'] = basket_total
         return super().get_context_data(**kwargs)
+
+    def get_form_kwargs(self):
+        kwargs = super().get_form_kwargs()
+        kwargs['user'] = self.request.user
+        return kwargs
 
     def form_valid(self, form):
         if self._basket_empty():
@@ -139,3 +142,107 @@ class BasketView(StatsMixin, CreateView):
             self.request.session.pop('products')
         if 'products_count' in self.request.session:
             self.request.session.pop('products_count')
+
+
+class OrderListView(LoginRequiredMixin, ListView):
+    template_name = 'order/list.html'
+    context_object_name = 'orders'
+    model = Order
+
+    def get_queryset(self):
+        if self.request.user.has_perm('webapp.view_order'):
+            return Order.objects.all().order_by('-created_at')
+        return self.request.user.orders.all().order_by('-created_at')
+
+
+class OrderDetailView(LoginRequiredMixin, DetailView):
+    template_name = 'order/detail.html'
+    model = Order
+
+    def get_queryset(self):
+        if self.request.user.has_perm('webapp.view_order'):
+            return Order.objects.all()
+        return self.request.user.orders.all()
+
+
+class OrderCreateView(PermissionRequiredMixin, CreateView):
+    model = Order
+    form_class = ManualOrderForm
+    template_name = 'order/create.html'
+    permission_required = 'webapp.add_order'
+
+    def get_success_url(self):
+        return reverse('webapp:order_detail', kwargs={'pk': self.object.pk})
+
+
+class OrderUpdateView(PermissionRequiredMixin, UpdateView):
+    model = Order
+    form_class = ManualOrderForm
+    template_name = 'order/update.html'
+    context_object_name = 'order'
+    permission_required = 'webapp.change_order'
+
+    def get_success_url(self):
+        return reverse('webapp:order_detail', kwargs={'pk': self.object.pk})
+
+
+class OrderDeliverView(PermissionRequiredMixin, View):
+    permission_required = 'webapp.deliver_order'
+
+    def get(self, request, *args, **kwargs):
+        order = get_object_or_404(Order, pk=kwargs.get('pk'))
+        order.status = ORDER_STATUS_DELIVERED
+        order.save()
+        return redirect('webapp:order_list')
+
+
+class OrderCancelView(PermissionRequiredMixin, View):
+    permission_required = 'webapp.delete_order'
+
+    def get(self, request, *args, **kwargs):
+        order = get_object_or_404(Order, pk=kwargs.get('pk'))
+        order.status = ORDER_STATUS_CANCELED
+        order.save()
+        return redirect('webapp:order_list')
+
+
+class OrderProductCreateView(PermissionRequiredMixin, CreateView):
+    model = OrderProduct
+    form_class = OrderProductForm
+    template_name = 'order_product/create.html'
+    permission_required = 'webapp.create_orderproduct'
+
+    def get_context_data(self, **kwargs):
+        kwargs['order'] = self.get_order()
+        return super().get_context_data(**kwargs)
+
+    def form_valid(self, form):
+        form.instance.order = self.get_order()
+        return super().form_valid(form)
+
+    def get_order(self):
+        return get_object_or_404(Order, pk=self.kwargs.get('pk'))
+
+    def get_success_url(self):
+        return reverse('webapp:order_detail', kwargs={'pk': self.object.order.pk})
+
+
+class OrderProductUpdateView(PermissionRequiredMixin, UpdateView):
+    model = OrderProduct
+    form_class = OrderProductForm
+    context_object_name = 'order_product'
+    template_name = 'order_product/update.html'
+    permission_required = 'webapp.change_orderproduct'
+
+    def get_success_url(self):
+        return reverse('webapp:order_detail', kwargs={'pk': self.object.order.pk})
+
+
+class OrderProductDeleteView(PermissionRequiredMixin, DeleteView):
+    model = OrderProduct
+    template_name = 'order_product/delete.html'
+    context_object_name = 'order_product'
+    permission_required = 'webapp.delete_orderproduct'
+
+    def get_success_url(self):
+        return reverse('webapp:order_detail', kwargs={'pk': self.object.order.pk})
